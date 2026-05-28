@@ -24,18 +24,6 @@ def parse_args(argv):
             i += 1
     return d
 
-def scale_vertex_data(obj, factor):
-    """Scale vertex positions and bone heads/tails directly."""
-    if obj.type == 'MESH' and obj.data:
-        for v in obj.data.vertices:
-            v.co *= factor
-        obj.data.update()
-    elif obj.type == 'ARMATURE' and obj.data:
-        for b in obj.data.bones:
-            b.head *= factor
-            b.tail *= factor
-        obj.data.update()
-
 def main():
     args = parse_args(argv)
     fbx_path = os.path.abspath(args.get('fbx', ''))
@@ -65,32 +53,41 @@ def main():
     all_meshes = [o for o in bpy.data.objects if o.type == 'MESH']
     armature = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
 
-    # ---- Debug: print bone lengths if armature exists ----
+    # ---- Debug: print world-space bone lengths if armature exists ----
     if armature:
-        b_lens = [b.length for b in armature.data.bones]
+        s = armature.scale.x
+        b_lens = [b.length * s for b in armature.data.bones]
         print(f"Armature: {armature.name}, {len(b_lens)} bones, "
-              f"avg length={sum(b_lens)/len(b_lens):.3f}m")
+              f"scale={s:.3f}, avg world bone={sum(b_lens)/len(b_lens):.3f}m")
 
-    # ---- Scale correction: check if model is unreasonably large ----
+    # ---- Scale correction: check if model is unreasonably large (>100m) ----
     max_dim = max((max(m.dimensions) for m in all_meshes if m.dimensions), default=0)
-    avg_bone = 0
-    if armature and armature.data.bones:
-        avg_bone = sum(b.length for b in armature.data.bones) / len(armature.data.bones)
+    print(f"Scale check: max mesh dimension = {max_dim:.1f}m")
 
-    scale_factor = 1.0
-    if max_dim > 100 or avg_bone > 0.5:
-        scale_factor = 0.01
-        print(f"Scale correction needed: max_dim={max_dim:.1f}m, avg_bone={avg_bone:.3f}m")
-        print(f"Applying 0.01 scale to all vertex/bone data (cm -> m)")
+    if max_dim > 100:
+        print(f"Scale correction needed: max dimension {max_dim:.1f}m > 100m")
+        print(f"Applying 0.01 scale to vertex data (cm -> m)")
         for obj in bpy.data.objects:
-            scale_vertex_data(obj, scale_factor)
-            obj.scale = (1.0, 1.0, 1.0)  # reset object scale since we baked into data
-        # Re-read meshes after scale
+            if obj.type == 'MESH' and obj.data:
+                for v in obj.data.vertices:
+                    v.co *= 0.01
+                obj.data.update()
+        for obj in bpy.data.objects:
+            if obj.type == 'ARMATURE' and obj.data:
+                bpy.context.view_layer.objects.active = obj
+                bpy.ops.object.mode_set(mode='EDIT')
+                for b in obj.data.edit_bones:
+                    b.head *= 0.01
+                    b.tail *= 0.01
+                bpy.ops.object.mode_set(mode='OBJECT')
+                obj.data.update()
+        for obj in bpy.data.objects:
+            obj.scale = (1.0, 1.0, 1.0)
         all_meshes = [o for o in bpy.data.objects if o.type == 'MESH']
         armature = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
         for m in all_meshes:
-            dims = m.dimensions
-            print(f"  after scale: {m.name} dimensions=({dims[0]:.3f}, {dims[1]:.3f}, {dims[2]:.3f})")
+            print(f"  after scale: {m.name} dimensions=({m.dimensions[0]:.3f}, "
+                  f"{m.dimensions[1]:.3f}, {m.dimensions[2]:.3f})")
 
     # ---- Debug: mesh details ----
     print("=== Mesh details ===")
