@@ -21,9 +21,8 @@ def main():
         print(f"ERROR: No master.blend at {master_blend}")
         sys.exit(1)
 
-    # Step 1: Import GLB in a fresh session at consistent 30fps
+    # Step 1: Import GLB in a fresh session and capture animation fcurve data
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.context.scene.render.fps = 30
     bpy.ops.import_scene.gltf(filepath=model_glb)
 
     glb_actions = []

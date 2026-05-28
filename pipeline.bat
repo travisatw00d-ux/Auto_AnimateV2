@@ -198,6 +198,12 @@ set "OUTPUT_DIR=!MODEL_INPUT!"
 for %%f in ("!MODEL_INPUT!") do set "OUTPUT_DIR=%%~dpf"
 set "OUTPUT_GLB=%OUTPUT_DIR%!MODEL_KEY!.glb"
 
+:: For Mode 2: auto-clean temp files for this model
+if "!MODE!"=="2" if exist "!MODEL_DIR!" (
+    rd /s /q "!MODEL_DIR!" >nul 2>&1
+    echo  Cleaned temp files for: !MODEL_KEY!
+)
+
 :: Backup original model before overwriting
 if not exist "%OUTPUT%\!MODEL_KEY!_original.glb" (
     if exist "!MODEL_INPUT!" (
