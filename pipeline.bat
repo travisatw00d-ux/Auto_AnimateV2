@@ -195,6 +195,11 @@ if "!MODE!"=="2" (
     echo  Transferring textures from model...
     "%BLENDER%" --background --python "%SCRIPTS%\transfer_model_textures.py" -- "!MODEL_FBX!" "!BASE_BLEND!" "!CHAR_BLEND!" 2>&1
     copy /y "!CHAR_BLEND!" "!MASTER_BLEND!" >nul
+    :: Import existing animations from original GLB (if any) into master.blend
+    if /i "!MODEL_EXT!"==".glb" (
+        echo  Importing existing animations from original GLB...
+        "%BLENDER%" --background --python "%SCRIPTS%\import_glb_animations.py" -- "!MODEL_INPUT!" "!MASTER_BLEND!" 2>&1
+    )
     echo  Ready - add animations to this model
     goto ANIM_LOOP
 )

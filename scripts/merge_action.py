@@ -29,7 +29,6 @@ def main():
     bpy.ops.wm.open_mainfile(filepath=master_blend)
     master_arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
     if master_arm is None: print("ERROR: No armature in master"); sys.exit(1)
-
     existing = {a.name for a in bpy.data.actions}
     if action_name in existing:
         print(f"Action '{action_name}' already exists in master - replacing")
