@@ -1,0 +1,7 @@
+temp/
+output/
+__pycache__/
+*.blend
+*.blend1
+*.fbx
+*.glb
