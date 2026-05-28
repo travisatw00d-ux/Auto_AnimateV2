@@ -163,11 +163,20 @@ if "!FIRST_LINE!"=="(none)" (
     pause & goto MAIN_MENU
 )
 
-:: Get source animation name
-set /p MIRROR_SRC="  Source animation name: "
+:: Get source animation name (number or name)
+set /p MIRROR_SRC="  Source animation name or number: "
 if "!MIRROR_SRC!"=="" (
     echo  No name entered
     pause & goto MAIN_MENU
+)
+
+:: Check if input is a number and convert to animation name
+set "MIRROR_REMAIN=!MIRROR_SRC!"
+for /f "delims=0123456789" %%a in ("!MIRROR_SRC!") do set "MIRROR_REMAIN=%%a"
+if "!MIRROR_REMAIN!"=="" (
+    for /f "tokens=1,2,* delims=. " %%a in ('findstr /b "!MIRROR_SRC!." "%MIRROR_LIST%"') do set "MIRROR_SRC=%%b %%c"
+    for /f "tokens=*" %%a in ("!MIRROR_SRC!") do set "MIRROR_SRC=%%a"
+    echo  Selected: !MIRROR_SRC!
 )
 
 :: Get destination animation name
