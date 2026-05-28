@@ -152,6 +152,36 @@ if not has_anim:
         slots = target.animation_data.action_suitable_slots
         if slots: target.animation_data.action_slot = slots[0]
 
+    # Apply rest-pose correction to animation fcurves (conjugation)
+    # transforms animation from source bone orientation space to target bone orientation space
+    if target.animation_data and target.animation_data.action:
+        corrections = {}
+        for src_name, tgt_name in BONE_MAP:
+            src_bone = source.data.bones.get(src_name)
+            tgt_bone = target.data.bones.get(tgt_name)
+            if src_bone and tgt_bone:
+                src_rest = src_bone.matrix_local.to_quaternion()
+                tgt_rest = tgt_bone.matrix_local.to_quaternion()
+                corr = tgt_rest.inverted() @ src_rest
+                if abs(corr.angle) > 0.001:
+                    corrections[tgt_name] = corr
+        if corrections:
+            action = target.animation_data.action
+            for fc in action.fcurves:
+                if 'rotation_quaternion' in fc.data_path:
+                    try:
+                        bname = fc.data_path.split('"')[1]
+                    except:
+                        continue
+                    if bname in corrections:
+                        corr = corrections[bname]
+                        for kp in fc.keyframe_points:
+                            q = mathutils.Quaternion(kp.co[1])
+                            q_c = corr @ q @ corr.inverted()
+                            vals = [q_c.w, q_c.x, q_c.y, q_c.z]
+                            kp.co[1] = vals[fc.array_index]
+            print(f"  Applied rest-pose correction to {len(corrections)} bones")
+
     for bone in target.pose.bones:
         for c in list(bone.constraints):
             if RETARGET_ID in c.name:
