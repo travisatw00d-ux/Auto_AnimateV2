@@ -114,13 +114,17 @@ def main():
     for m in skinned_meshes:
         m.select_set(True)
 
+    bpy.context.scene.unit_settings.system = 'METRIC'
+    bpy.context.scene.unit_settings.scale_length = 1.0
+
     bpy.ops.export_scene.fbx(
         filepath=output_path,
         use_selection=True,
         object_types={'ARMATURE', 'MESH'},
         add_leaf_bones=False,
         bake_anim=False,
-        apply_scale_options='FBX_SCALE_ALL',
+        global_scale=1.0,
+        apply_scale_options='FBX_SCALE_UNITS',
         path_mode='COPY',
         embed_textures=True,
         mesh_smooth_type='FACE',

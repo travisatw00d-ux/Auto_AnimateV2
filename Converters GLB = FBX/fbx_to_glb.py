@@ -39,6 +39,8 @@ def main():
 
     # Clean scene
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.context.scene.unit_settings.system = 'METRIC'
+    bpy.context.scene.unit_settings.scale_length = 1.0
 
     # ---- Import FBX ----
     bpy.ops.import_scene.fbx(filepath=fbx_path, use_anim=True)
