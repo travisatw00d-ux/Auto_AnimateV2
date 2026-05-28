@@ -170,14 +170,11 @@ if "!MIRROR_SRC!"=="" (
     pause & goto MAIN_MENU
 )
 
-:: Check if input is a number and convert to animation name
-set "MIRROR_REMAIN=!MIRROR_SRC!"
-for /f "delims=0123456789" %%a in ("!MIRROR_SRC!") do set "MIRROR_REMAIN=%%a"
-if "!MIRROR_REMAIN!"=="" (
-    for /f "tokens=1,2,* delims=. " %%a in ('findstr /b "!MIRROR_SRC!." "%MIRROR_LIST%"') do set "MIRROR_SRC=%%b %%c"
-    for /f "tokens=*" %%a in ("!MIRROR_SRC!") do set "MIRROR_SRC=%%a"
-    echo  Selected: !MIRROR_SRC!
-)
+:: Look up animation name by number or name via Blender
+"%BLENDER%" --background --python "%SCRIPTS%\lookup_anim.py" -- "!MIRROR_INPUT!" "!MIRROR_SRC!" > "%TEMP%\!MIRROR_FILE!_lookup.txt" 2>&1
+for /f "usebackq tokens=1,* delims=:" %%a in (`findstr /b "ANIM_NAME:" "%TEMP%\!MIRROR_FILE!_lookup.txt"`) do set "MIRROR_SRC=%%b"
+del "%TEMP%\!MIRROR_FILE!_lookup.txt" >nul 2>&1
+echo  Selected: !MIRROR_SRC!
 
 :: Get destination animation name
 set "MIRROR_DST=mirror_!MIRROR_SRC!"
