@@ -49,6 +49,7 @@ def main():
         stp.frame_end = frame_end
 
     arm.animation_data.use_nla = True
+    bpy.context.scene.render.fps = 30
     bpy.context.scene.frame_end = max((int(a.frame_range[1]) for a in anim_actions), default=30)
 
     # Export GLB
