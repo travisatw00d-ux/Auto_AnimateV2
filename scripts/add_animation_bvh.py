@@ -50,6 +50,7 @@ if abs(sf - 1.0) > 0.001:
 print(f"Source scaled by {sf:.4f}")
 
 # Force consistent 30fps regardless of BVH native frame rate
+native_fps = bpy.context.scene.render.fps
 bpy.context.scene.render.fps = 30
 
 # -- Bone mapping for fallback --
@@ -144,7 +145,8 @@ if not has_anim:
     bpy.context.view_layer.objects.active = target
     bpy.ops.object.mode_set(mode='POSE')
     fe = int(source.animation_data.action.frame_range[1])
-    bpy.ops.nla.bake(frame_start=1, frame_end=fe, step=1, visual_keying=True, only_selected=True, bake_types={'POSE'})
+    fe_30 = int(fe * 30 / native_fps) if native_fps > 0 else fe
+    bpy.ops.nla.bake(frame_start=1, frame_end=fe_30, step=1, visual_keying=True, only_selected=True, bake_types={'POSE'})
 
     if hasattr(target.animation_data, "action_slot"):
         slots = target.animation_data.action_suitable_slots
