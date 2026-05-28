@@ -43,6 +43,8 @@ def main():
         nfc.keyframe_points.add(len(pts))
         for i, (t, v) in enumerate(pts):
             nfc.keyframe_points[i].co = (t, v)
+        for kp in nfc.keyframe_points:
+            kp.interpolation = 'LINEAR'
 
     bpy.context.scene.render.fps = 30
     # Save directly in-place (no delete-before-save to avoid corruption on crash)

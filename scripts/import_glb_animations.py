@@ -70,6 +70,8 @@ def main():
             nfc.keyframe_points.add(len(pts))
             for i, (t, v) in enumerate(pts):
                 nfc.keyframe_points[i].co = (t, v)
+            for kp in nfc.keyframe_points:
+                kp.interpolation = 'LINEAR'
         added += 1
     print(f"Added {added} actions from GLB to master.blend")
 
