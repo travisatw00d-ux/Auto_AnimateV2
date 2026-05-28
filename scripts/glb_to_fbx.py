@@ -129,7 +129,9 @@ def main():
         secondary_bone_axis='X',
         bake_space_transform=False,
     )
-    print(f"Converted: {input_path} -> {output_path}")
+    out_size = os.path.getsize(output_path)
+    in_size = os.path.getsize(input_path)
+    print(f"Converted: {input_path} ({in_size} bytes) -> {output_path} ({out_size} bytes)")
 
 if __name__ == "__main__":
     main()
