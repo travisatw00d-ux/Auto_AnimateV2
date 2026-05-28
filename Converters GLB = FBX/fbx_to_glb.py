@@ -105,18 +105,31 @@ def main():
                         print(f"    tex: {img.name} ({img.size[0]}x{img.size[1]}, "
                               f"{img.colorspace_settings.name})")
 
+    # ---- Bake armature scale into bones (so armature scale = (1,1,1) for GLTF) ----
+    if armature:
+        s = armature.scale.x
+        if abs(s - 1.0) > 0.001:
+            print(f"Baking armature scale {s:.3f} into bones (resetting to 1.0)")
+            bpy.context.view_layer.objects.active = armature
+            bpy.ops.object.mode_set(mode='EDIT')
+            for b in armature.data.edit_bones:
+                b.head *= s
+                b.tail *= s
+            bpy.ops.object.mode_set(mode='OBJECT')
+            armature.scale = (1.0, 1.0, 1.0)
+
     # ---- Identify skinned meshes (exclude orphan spheres) ----
     skinned_meshes = []
     for m in all_meshes:
         bone_names = {b.name for b in (armature.data.bones if armature else [])}
         vg_names = {vg.name for vg in m.vertex_groups}
         matching = bone_names & vg_names
-        is_skinned = armature and matching and any(
-            mod.type == 'ARMATURE' for mod in m.modifiers)
+        is_skinned = armature and len(matching) >= 5 and any(
+            mod.type == 'ARMATURE' and mod.object == armature for mod in m.modifiers)
         if is_skinned:
             skinned_meshes.append(m)
         else:
-            print(f"  SKIP (not skinned): {m.name}")
+            print(f"  SKIP (not skinned): {m.name} ({len(matching)} matching vgroups)")
 
     if not skinned_meshes:
         print("WARNING: No skinned meshes found, falling back to all meshes")
@@ -127,8 +140,6 @@ def main():
         if not has_mod and armature:
             mod = mesh.modifiers.new(name='Armature', type='ARMATURE')
             mod.object = armature
-        if mesh.parent != armature:
-            mesh.parent = armature
 
     print(f"Exporting: armature={armature.name if armature else 'NONE'}, "
           f"skinned meshes={[m.name for m in skinned_meshes]}")
