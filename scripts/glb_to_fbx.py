@@ -61,6 +61,23 @@ def main():
         if mesh.parent != armature:
             mesh.parent = armature
 
+    # Debug: print material and texture info
+    print(f"Materials on skinned meshes:")
+    for m in skinned_meshes:
+        for slot in m.material_slots:
+            mat = slot.material
+            if mat and mat.node_tree:
+                for node in mat.node_tree.nodes:
+                    if node.type == 'TEX_IMAGE' and node.image:
+                        img = node.image
+                        print(f"  {mat.name}: {node.name} -> {img.name} "
+                              f"({img.size[0]}x{img.size[1]}, "
+                              f"colorspace={img.colorspace_settings.name})")
+
+    # Pack all images into memory before export
+    bpy.ops.file.pack_all()
+    print("All images packed into memory")
+
     print(f"Exporting: armature={armature.name if armature else 'NONE'}, "
           f"skinned meshes={[m.name for m in skinned_meshes]}")
 
@@ -84,7 +101,7 @@ def main():
         use_mesh_modifiers=True,
         primary_bone_axis='Y',
         secondary_bone_axis='X',
-        bake_space_transform=True,
+        bake_space_transform=False,
     )
     print(f"Converted: {input_path} -> {output_path}")
 
