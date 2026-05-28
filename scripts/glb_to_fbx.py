@@ -81,7 +81,6 @@ def main():
         path_mode='COPY',
         embed_textures=True,
         mesh_smooth_type='FACE',
-        use_triangulate=True,
         use_mesh_modifiers=True,
         primary_bone_axis='Y',
         secondary_bone_axis='X',
