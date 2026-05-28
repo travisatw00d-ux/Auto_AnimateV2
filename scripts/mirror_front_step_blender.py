@@ -85,16 +85,6 @@ for fc in list(dst.fcurves):
                 kp.handle_left.y = -kp.handle_left.y
                 kp.handle_right.y = -kp.handle_right.y
 
-# Set root Y offset
-dp_root = 'pose.bones["RL_BoneRoot"].location'
-for fc in dst.fcurves:
-    if fc.data_path == dp_root and fc.array_index == 1:
-        for kp in fc.keyframe_points:
-            kp.co.y = 0.17
-            kp.handle_left.y = 0.17
-            kp.handle_right.y = 0.17
-        break
-
 print(f"{dst_name}: loc X neg + quat YZ neg + leg name swap (arms preserved)")
 
 keep = {'Armature.001', 'tripo_node_25fa9213_3918_48e4_9500_07f6d78ef73cmesh.001'}
