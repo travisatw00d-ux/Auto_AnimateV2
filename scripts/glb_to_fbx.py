@@ -61,7 +61,13 @@ def main():
         if mesh.parent != armature:
             mesh.parent = armature
 
-    # Debug: print material and texture info
+    # Save every texture to a folder next to the FBX, then pack it
+    # so the FBX exporter has real file data to embed
+    out_dir = os.path.dirname(output_path)
+    img_dir = os.path.join(out_dir, "textures")
+    if not os.path.exists(img_dir):
+        os.makedirs(img_dir)
+
     print(f"Materials on skinned meshes:")
     for m in skinned_meshes:
         for slot in m.material_slots:
@@ -73,10 +79,30 @@ def main():
                         print(f"  {mat.name}: {node.name} -> {img.name} "
                               f"({img.size[0]}x{img.size[1]}, "
                               f"colorspace={img.colorspace_settings.name})")
+                        if img.has_data and img.size[0] > 0 and img.size[1] > 0:
+                            tex_path = os.path.abspath(
+                                os.path.join(img_dir, img.name + '.png'))
+                            try:
+                                # Save pixel data to a PNG file on disk
+                                old_cs = img.colorspace_settings.name
+                                img.filepath_raw = tex_path
+                                img.save()
+                                # Reload from disk so FBX exporter sees a real file
+                                img.filepath = tex_path
+                                img.reload()
+                                # Restore color space (PNG reload resets it to sRGB)
+                                img.colorspace_settings.name = old_cs
+                                # Pack into .blend memory
+                                img.pack()
+                                packed_ok = img.packed_file is not None
+                                if packed_ok:
+                                    print(f"    -> saved + packed: {tex_path}")
+                                else:
+                                    print(f"    -> saved but NOT packed (no packed_file)")
+                            except Exception as e:
+                                print(f"    -> WARNING: texture save/pack failed: {e}")
 
-    # Pack all images into memory before export
-    bpy.ops.file.pack_all()
-    print("All images packed into memory")
+    print("All textures saved and packed")
 
     print(f"Exporting: armature={armature.name if armature else 'NONE'}, "
           f"skinned meshes={[m.name for m in skinned_meshes]}")
