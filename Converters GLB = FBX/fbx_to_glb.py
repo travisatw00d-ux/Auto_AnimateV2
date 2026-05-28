@@ -1,4 +1,4 @@
-"""fbx_to_glb.py -- Convert FBX to GLB preserving textures and animations.
+"""fbx_to_glb.py — Convert FBX to GLB preserving textures and animations.
 
 Usage:
   blender --background --python fbx_to_glb.py -- --fbx file.fbx --output file.glb
@@ -52,93 +52,37 @@ all_meshes = [o for o in bpy.data.objects if o.type == 'MESH']
 
 print(f"FBX imported: meshes={[m.name for m in all_meshes]}, armature={armature}")
 
-print("=== Objects in scene ===")
+# ---- DEBUG: dump all objects ----
 for o in bpy.data.objects:
     dims = o.dimensions if o.type == 'MESH' else (0, 0, 0)
-    print(f"  {o.name}: type={o.type}, scale={tuple(o.scale)}, "
-          f"dims=({dims[0]:.3f}, {dims[1]:.3f}, {dims[2]:.3f})")
-    if o.type == 'MESH':
-        vgs = [vg.name for vg in o.vertex_groups]
-        mods = [(mod.type, mod.object.name if mod.object else None) for mod in o.modifiers]
-        print(f"    vgroups={vgs}, modifiers={mods}")
-    if o.type == 'ARMATURE':
-        b_lens = [b.length for b in o.data.bones]
-        print(f"    {len(b_lens)} bones, avg len={sum(b_lens)/len(b_lens):.3f}")
+    print(f"  {o.name}: type={o.type}, scale={tuple(o.scale)}, dims=({dims[0]:.3f}, {dims[1]:.3f}, {dims[2]:.3f})")
+    if o.type == 'ARM':
+        # Actually show armature info
+        pass
 
-# ---- Select only skinned meshes + armature (exclude orphan spheres) ----
-skinned = []
-for m in all_meshes:
-    bone_names = {b.name for b in (armature.data.bones if armature else [])}
-    vg_names = {vg.name for vg in m.vertex_groups}
-    is_skinned = armature and (bone_names & vg_names)
-    if is_skinned:
-        skinned.append(m)
-    else:
-        print(f"  SKIP (not skinned): {m.name}")
-
-if not skinned:
-    print("WARNING: No skinned meshes found, falling back to all meshes")
-    skinned = all_meshes
-
-print(f"Export selection: armature={armature.name if armature else 'NONE'}, "
-      f"skinned={[m.name for m in skinned]}")
-
-# ---- If a texture GLB was provided, transfer its material ----
-if tex_glb_path and os.path.isfile(tex_glb_path) and skinned:
-    fbx_objs = set(bpy.data.objects)
-    print(f"Importing texture GLB: {tex_glb_path}")
-    bpy.ops.import_scene.gltf(filepath=tex_glb_path)
-    tex_mesh = next((o for o in bpy.data.objects if o.type == 'MESH' and o not in fbx_objs), None)
-    if tex_mesh and tex_mesh.data.materials and skinned[0]:
-        mat = tex_mesh.data.materials[0]
-        skinned[0].data.materials.clear()
-        skinned[0].data.materials.append(mat)
-        print(f"Transferred material '{mat.name}' from texture GLB")
-    for o in list(bpy.data.objects):
-        if o not in fbx_objs:
-            bpy.data.objects.remove(o, do_unlink=True)
-    for m in list(bpy.data.meshes):
-        if m.users == 0: bpy.data.meshes.remove(m)
-else:
-    # ---- Resolve textures from sidecar files ----
-    texture_exts = {'.png', '.jpg', '.jpeg', '.tga', '.bmp'}
-    texture_candidates = []
-    if os.path.isdir(fbx_dir):
-        for root, dirs, files in os.walk(fbx_dir):
-            for f in files:
-                if os.path.splitext(f)[1].lower() in texture_exts:
-                    texture_candidates.append(os.path.join(root, f))
-
-    for img in list(bpy.data.images):
-        if img.has_data:
-            continue
-        img_name_lower = img.name.lower()
-        img_words = set(img_name_lower.replace('-',' ').replace('_',' ').replace('.',' ').split())
-        best = None
-        best_score = 0
-        for candidate in texture_candidates:
-            c_name = os.path.splitext(os.path.basename(candidate))[0].lower()
-            c_words = set(c_name.replace('-',' ').replace('_',' ').replace('.',' ').split())
-            common = len(img_words & c_words)
-            if common > best_score or (common == best_score and c_name == fbx_name.lower()):
-                best = candidate
-                best_score = common
-        if best:
-            try:
-                img.filepath = best
-                img.reload()
-                img.update()
-                if img.has_data:
-                    img.pack()
-                    print(f"Loaded texture: {best}")
-            except Exception as e:
-                print(f"Warning: could not load {best}: {e}")
-
-# ---- Pack textures ----
-bpy.ops.file.pack_all()
+# ---- Normalize armature scale: bake non-unit scale into bones ----
+if armature:
+    s = armature.scale.x
+    if abs(s - 1.0) > 0.001:
+        print(f"Normalizing armature scale: {s:.4f} -> 1.0 (baking into bones)")
+        bpy.context.view_layer.objects.active = armature
+        bpy.ops.object.mode_set(mode='EDIT')
+        for b in armature.data.edit_bones:
+            b.head *= s
+            b.tail *= s
+        bpy.ops.object.mode_set(mode='OBJECT')
+        armature.scale = (1.0, 1.0, 1.0)
+        # Also adjust mesh vertex positions to match new bone space
+        # (original vertices are in world space at ~1m, bones were at 0.0446m world,
+        #  now bones are at 0.0446m local with scale 1.0)
+        # The mesh already has scale 1.0 and its vertices are at ~1m.
+        # No vertex adjustment needed since the bone world positions are preserved.
 
 # ---- Select all and export ----
 bpy.ops.object.select_all(action='SELECT')
+
+# ---- Pack textures ----
+bpy.ops.file.pack_all()
 
 # ---- Export GLB ----
 bpy.ops.export_scene.gltf(

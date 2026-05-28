@@ -104,6 +104,19 @@ def main():
 
     print("All textures saved and packed")
 
+    # Normalize armature scale before FBX export (bake into bones)
+    if armature:
+        s = armature.scale.x
+        if abs(s - 1.0) > 0.001:
+            print(f"Normalizing armature scale: {s:.4f} -> 1.0 (baking into bones)")
+            bpy.context.view_layer.objects.active = armature
+            bpy.ops.object.mode_set(mode='EDIT')
+            for b in armature.data.edit_bones:
+                b.head *= s
+                b.tail *= s
+            bpy.ops.object.mode_set(mode='OBJECT')
+            armature.scale = (1.0, 1.0, 1.0)
+
     print(f"Exporting: armature={armature.name if armature else 'NONE'}, "
           f"skinned meshes={[m.name for m in skinned_meshes]}")
 
