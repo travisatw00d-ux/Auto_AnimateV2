@@ -52,6 +52,19 @@ all_meshes = [o for o in bpy.data.objects if o.type == 'MESH']
 
 print(f"FBX imported: meshes={[m.name for m in all_meshes]}, armature={armature}")
 
+print("=== Objects in scene ===")
+for o in bpy.data.objects:
+    dims = o.dimensions if o.type == 'MESH' else (0, 0, 0)
+    print(f"  {o.name}: type={o.type}, scale={tuple(o.scale)}, "
+          f"dims=({dims[0]:.3f}, {dims[1]:.3f}, {dims[2]:.3f})")
+    if o.type == 'MESH':
+        vgs = [vg.name for vg in o.vertex_groups]
+        mods = [(mod.type, mod.object.name if mod.object else None) for mod in o.modifiers]
+        print(f"    vgroups={vgs}, modifiers={mods}")
+    if o.type == 'ARMATURE':
+        b_lens = [b.length for b in o.data.bones]
+        print(f"    {len(b_lens)} bones, avg len={sum(b_lens)/len(b_lens):.3f}")
+
 # ---- Select only skinned meshes + armature (exclude orphan spheres) ----
 skinned = []
 for m in all_meshes:
@@ -124,19 +137,13 @@ else:
 # ---- Pack textures ----
 bpy.ops.file.pack_all()
 
-# ---- Select only what we want to export ----
-bpy.ops.object.select_all(action='DESELECT')
-if armature:
-    armature.select_set(True)
-    bpy.context.view_layer.objects.active = armature
-for m in skinned:
-    m.select_set(True)
+# ---- Select all and export ----
+bpy.ops.object.select_all(action='SELECT')
 
 # ---- Export GLB ----
 bpy.ops.export_scene.gltf(
     filepath=output,
     export_format='GLB',
-    use_selection=True,
     export_texcoords=True,
     export_normals=True,
     export_skins=True,
