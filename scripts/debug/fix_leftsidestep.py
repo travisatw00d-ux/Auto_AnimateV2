@@ -1,99 +1,72 @@
 """
-Import LeftSideStep.bvh (AccuRIG skeleton), convert EULER to QUATERNION,
-and save to master.blend preserving all other actions.
+Fix LeftSideStep shoulder rotation by rotating shoulder bones 180 degrees.
+The retargeter maps shoulders incorrectly for this AccuRIG-skeleton BVH.
 """
-import bpy, os, sys, mathutils
+import bpy, os, mathutils
 
 master_path = r"C:\Dev\Auto-AnimateV2\temp\MainCharacter\master.blend"
-bvh_path = r"C:\Dev\Animations\LeftSideStep.bvh"
 
 bpy.ops.wm.open_mainfile(filepath=master_path)
-tgt = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
-if tgt is None:
-    print("ERROR: No target armature"); sys.exit(1)
 
-if "LeftSideStep" in bpy.data.actions:
-    bpy.data.actions.remove(bpy.data.actions["LeftSideStep"])
+# Remove the EULER-converted action and redo from the original retargeted version
+# Actually, let's just fix the shoulder rotation on whatever version exists
+a = bpy.data.actions.get("LeftSideStep")
+if a is None:
+    print("ERROR: LeftSideStep action not found")
+    sys.exit(1)
 
-for pb in tgt.pose.bones:
-    pb.rotation_mode = 'QUATERNION'
+# Rotate shoulder bones 180 degrees around Z axis (common fix for backwards arms)
+fix_rot = mathutils.Quaternion((0, 0, 0, 1))  # identity, will be set per bone
+# For CC_Base_L_Clavicle and CC_Base_R_Clavicle, rotate 180 deg around Z
+z180 = mathutils.Quaternion((0, 0, 1), 3.14159)  # 180 degrees around Z
 
-bpy.ops.import_anim.bvh(filepath=bvh_path, global_scale=1.0)
-
-src = None
-for o in bpy.data.objects:
-    if o.type == 'ARMATURE' and o != tgt and o.animation_data and o.animation_data.action:
-        src = o
-        break
-if src is None:
-    print("ERROR: No source armature with action"); sys.exit(1)
-
-action = src.animation_data.action
-
-# Strip location and scale fcurves
-for fc in list(action.fcurves):
-    if '.location' in fc.data_path or '.scale' in fc.data_path:
-        action.fcurves.remove(fc)
-
-# Collect EULER fcurve data BEFORE removing them
-euler_data = {}
-for fc in list(action.fcurves):
-    if 'rotation_euler' in fc.data_path:
-        bone = fc.data_path.split('"')[1]
-        if bone not in euler_data:
-            euler_data[bone] = {}
-        euler_data[bone][fc.array_index] = [(kp.co[0], kp.co[1]) for kp in fc.keyframe_points]
-
-# Remove EULER fcurves and create QUATERNION fcurves
-converted = 0
-for bone_name, channels in euler_data.items():
-    if len(channels) < 3:
+# Find and fix clavicle fcurves
+import sys
+fixed = 0
+for fc in a.fcurves:
+    if 'rotation_quaternion' not in fc.data_path:
         continue
-    pts_x = channels.get(0, [])
-    pts_y = channels.get(1, [])
-    pts_z = channels.get(2, [])
-    if not pts_x or not pts_y or not pts_z:
+    bone = fc.data_path.split('"')[1]
+    if 'Clavicle' not in bone:
         continue
-    path = f'pose.bones["{bone_name}"].rotation_quaternion'
-    nw = action.fcurves.new(path, index=0)
-    nx = action.fcurves.new(path, index=1)
-    ny = action.fcurves.new(path, index=2)
-    nz = action.fcurves.new(path, index=3)
-    count = len(pts_x)
-    nw.keyframe_points.add(count)
-    nx.keyframe_points.add(count)
-    ny.keyframe_points.add(count)
-    nz.keyframe_points.add(count)
-    for i in range(count):
-        t = pts_x[i][0]
-        e = mathutils.Euler((pts_x[i][1], pts_y[i][1], pts_z[i][1]), 'XYZ')
-        q = e.to_quaternion()
-        nw.keyframe_points[i].co = (t, q.w)
-        nx.keyframe_points[i].co = (t, q.x)
-        ny.keyframe_points[i].co = (t, q.y)
-        nz.keyframe_points[i].co = (t, q.z)
-    converted += 1
+    # Rotate 180 degrees around Z for each keyframe
+    for kp in fc.keyframe_points:
+        # Build full quaternion from all 4 channels, then rotate
+        pass  # We'll do this differently
+    fixed += 1
 
-# Remove the old EULER fcurves after data has been saved
-for fc in list(action.fcurves):
-    if 'rotation_euler' in fc.data_path:
-        action.fcurves.remove(fc)
+# Simpler approach: directly modify the quaternion fcurve values
+# Group fcurves by bone
+bone_fcs = {}
+for fc in a.fcurves:
+    if 'rotation_quaternion' not in fc.data_path:
+        continue
+    bone = fc.data_path.split('"')[1]
+    if 'Clavicle' not in bone:
+        continue
+    if bone not in bone_fcs:
+        bone_fcs[bone] = {}
+    bone_fcs[bone][fc.array_index] = fc
 
-# Set LINEAR interpolation
-for fc in action.fcurves:
-    if 'rotation_quaternion' in fc.data_path:
-        for kp in fc.keyframe_points:
-            kp.interpolation = 'LINEAR'
-
-print(f"LeftSideStep: {len(action.fcurves)} fcurves, {converted} bones converted to QUATERNION")
-
-# Transfer to target
-if tgt.animation_data is None:
-    tgt.animation_data_create()
-tgt.animation_data.action = action
-action.name = "LeftSideStep"
-
-bpy.data.objects.remove(src, do_unlink=True)
+for bone_name, fcs in bone_fcs.items():
+    if len(fcs) < 4:
+        continue
+    fc_w = fcs.get(0); fc_x = fcs.get(1); fc_y = fcs.get(2); fc_z = fcs.get(3)
+    if any(fc is None for fc in (fc_w, fc_x, fc_y, fc_z)):
+        continue
+    for i in range(len(fc_w.keyframe_points)):
+        q = mathutils.Quaternion((
+            fc_w.keyframe_points[i].co[1],
+            fc_x.keyframe_points[i].co[1],
+            fc_y.keyframe_points[i].co[1],
+            fc_z.keyframe_points[i].co[1],
+        ))
+        q_fixed = z180 @ q  # rotate 180 degrees around Z
+        fc_w.keyframe_points[i].co = (fc_w.keyframe_points[i].co[0], q_fixed.w)
+        fc_x.keyframe_points[i].co = (fc_x.keyframe_points[i].co[0], q_fixed.x)
+        fc_y.keyframe_points[i].co = (fc_y.keyframe_points[i].co[0], q_fixed.y)
+        fc_z.keyframe_points[i].co = (fc_z.keyframe_points[i].co[0], q_fixed.z)
+    print(f"Fixed shoulder: {bone_name}")
 
 if os.path.exists(master_path):
     os.remove(master_path)

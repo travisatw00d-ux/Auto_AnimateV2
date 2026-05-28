@@ -25,14 +25,14 @@ echo.
 echo  [1] Clear All And Start New
 echo  [2] Add Animations (keep existing)
 echo  [3] Manually Delete Animations
-echo  [4] Clean Temp (delete temporary files for a model)
+echo  [4] Mirror Animation (create mirrored copy of an animation)
 echo.
 set /p MODE="  Choose (1, 2, 3, or 4): "
 
 if "!MODE!"=="1" goto START_FRESH
 if "!MODE!"=="2" goto ADD_MODE
 if "!MODE!"=="3" goto DELETE_MODE
-if "!MODE!"=="4" goto CLEAN_TEMP
+if "!MODE!"=="4" goto MIRROR_MODE
 echo  Invalid choice
 pause & exit /b 1
 
@@ -126,31 +126,81 @@ del "%ANIM_LIST%" >nul 2>&1
 echo.
 goto MAIN_MENU
 
-:CLEAN_TEMP
+:MIRROR_MODE
 echo.
 echo ============================================================
-echo  CLEAN TEMP FILES
+echo  MIRROR ANIMATION
 echo ============================================================
 echo.
-echo  Drag a .fbx or .glb file here and press Enter
-echo  (this will delete all temporary files for this model)
+echo  Drag a .glb file here and press Enter
 echo.
-set /p CLEAN_INPUT="  Model: "
-set "CLEAN_INPUT=!CLEAN_INPUT:"=!"
-if not exist "!CLEAN_INPUT!" (
+set /p MIRROR_INPUT="  Model: "
+set "MIRROR_INPUT=!MIRROR_INPUT:"=!"
+if not exist "!MIRROR_INPUT!" (
     echo  ERROR: File not found
     pause & goto MAIN_MENU
 )
-for %%f in ("!CLEAN_INPUT!") do set "CLEAN_FILE=%%~nf"
-set "CLEAN_KEY=!CLEAN_FILE!"
-for %%a in (!CLEAN_KEY!) do set "CLEAN_KEY=%%a"
-set "CLEAN_KEY=!CLEAN_KEY: =_!"
-if exist "%TEMP%\!CLEAN_KEY!" (
-    rd /s /q "%TEMP%\!CLEAN_KEY!" >nul 2>&1
-    echo  Deleted temp files for: !CLEAN_KEY!
-) else (
-    echo  No temp files found for: !CLEAN_KEY!
+for %%f in ("!MIRROR_INPUT!") do set "MIRROR_EXT=%%~xf"
+if /i not "!MIRROR_EXT!"==".glb" (
+    echo  ERROR: Only .glb files are supported
+    pause & goto MAIN_MENU
 )
+for %%f in ("!MIRROR_INPUT!") do set "MIRROR_FILE=%%~nf"
+
+:: List animations via Blender
+set "MIRROR_LIST=%TEMP%\!MIRROR_FILE!_anim_list.txt"
+"%BLENDER%" --background --python "%SCRIPTS%\list_glb_animations.py" -- "!MIRROR_INPUT!" "!MIRROR_LIST!" 2>&1
+echo.
+echo  ============================================================
+echo  Animations on !MIRROR_FILE!:
+echo  ============================================================
+type "%MIRROR_LIST%"
+echo.
+
+set /p FIRST_LINE=<"%MIRROR_LIST%"
+if "!FIRST_LINE!"=="(none)" (
+    echo  No animations to mirror
+    pause & goto MAIN_MENU
+)
+
+:: Get source animation name
+set /p MIRROR_SRC="  Source animation name: "
+if "!MIRROR_SRC!"=="" (
+    echo  No name entered
+    pause & goto MAIN_MENU
+)
+
+:: Get destination animation name
+set "MIRROR_DST=mirror_!MIRROR_SRC!"
+set /p MIRROR_DST="  Destination name (default: !MIRROR_DST!): "
+if "!MIRROR_DST!"=="" set "MIRROR_DST=mirror_!MIRROR_SRC!"
+
+:: Choose mirror type
+echo.
+echo  Mirror types:
+echo    [1] Generic (mirror all limbs)
+echo    [2] SideStep (legs only, preserves arms)
+echo    [3] FrontStep (legs only, preserves arms)
+echo    [4] Blender (generic blender variant)
+echo.
+set /p MIRROR_TYPE="  Choose (1-4, default 1): "
+if "!MIRROR_TYPE!"=="" set "MIRROR_TYPE=1"
+
+if "!MIRROR_TYPE!"=="1" set "MIRROR_SCRIPT=mirror_animation.py"
+if "!MIRROR_TYPE!"=="2" set "MIRROR_SCRIPT=mirror_side_step.py"
+if "!MIRROR_TYPE!"=="3" set "MIRROR_SCRIPT=mirror_front_step.py"
+if "!MIRROR_TYPE!"=="4" set "MIRROR_SCRIPT=mirror_front_step_blender.py"
+
+echo.
+echo  Mirroring !MIRROR_SRC! -> !MIRROR_DST! using !MIRROR_SCRIPT!...
+"%BLENDER%" --background --python "%SCRIPTS%\!MIRROR_SCRIPT!" -- "!MIRROR_INPUT!" "!MIRROR_SRC!" "!MIRROR_DST!" 2>&1
+if errorlevel 1 (
+    echo  ERROR: Mirroring failed
+    pause & goto MAIN_MENU
+)
+del "%MIRROR_LIST%" >nul 2>&1
+echo.
+echo  Mirror complete: !MIRROR_SRC! -> !MIRROR_DST!
 echo.
 goto MAIN_MENU
 
