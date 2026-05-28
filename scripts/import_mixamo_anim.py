@@ -107,13 +107,18 @@ def main():
     # Fix fcurve data_paths
     fixed = 0
     for fc in action.fcurves:
+        fixed_this = False
         for mix_name, acc_name in TO_ACCURIG.items():
-            old = f'pose.bones["{mix_name}"]'
-            new = f'pose.bones["{acc_name}"]'
-            if old in fc.data_path:
-                fc.data_path = fc.data_path.replace(old, new)
-                fixed += 1
+            if fixed_this:
                 break
+            for prefix in ('', 'mixamorig:'):
+                old = f'pose.bones["{prefix}{mix_name}"]'
+                new = f'pose.bones["{acc_name}"]'
+                if old in fc.data_path:
+                    fc.data_path = fc.data_path.replace(old, new)
+                    fixed += 1
+                    fixed_this = True
+                    break
     print(f"Fixed {fixed} fcurve paths")
 
     # Strip armature-object-scale fcurves (Mixamo sets 0.01) 
@@ -174,12 +179,6 @@ def main():
     if tgt.animation_data is None:
         tgt.animation_data_create()
     tgt.animation_data.action = action
-    if not any(s.name == tgt.name for s in action.slots):
-        for s in list(action.slots): action.slots.remove(s)
-        slot = action.slots.new(id_type='OBJECT', name=tgt.name)
-    else:
-        slot = next(s for s in action.slots if s.name == tgt.name)
-    tgt.animation_data.action_slot = slot
     print("Action transferred to target")
 
     # Rename action to friendly clip name (from animation filename)
