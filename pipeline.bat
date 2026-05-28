@@ -181,25 +181,10 @@ set "MIRROR_DST=mirror_!MIRROR_SRC!"
 set /p MIRROR_DST="  Destination name (default: !MIRROR_DST!): "
 if "!MIRROR_DST!"=="" set "MIRROR_DST=mirror_!MIRROR_SRC!"
 
-:: Choose mirror type
 echo.
-echo  Mirror types:
-echo    [1] Generic (mirror all limbs)
-echo    [2] SideStep (legs only, preserves arms)
-echo    [3] FrontStep (legs only, preserves arms)
-echo    [4] Blender (generic blender variant)
-echo.
-set /p MIRROR_TYPE="  Choose (1-4, default 1): "
-if "!MIRROR_TYPE!"=="" set "MIRROR_TYPE=1"
 
-if "!MIRROR_TYPE!"=="1" set "MIRROR_SCRIPT=mirror_animation.py"
-if "!MIRROR_TYPE!"=="2" set "MIRROR_SCRIPT=mirror_side_step.py"
-if "!MIRROR_TYPE!"=="3" set "MIRROR_SCRIPT=mirror_front_step.py"
-if "!MIRROR_TYPE!"=="4" set "MIRROR_SCRIPT=mirror_front_step_blender.py"
-
-echo.
-echo  Mirroring !MIRROR_SRC! -> !MIRROR_DST! using !MIRROR_SCRIPT!...
-"%BLENDER%" --background --python "%SCRIPTS%\!MIRROR_SCRIPT!" -- "!MIRROR_INPUT!" "!MIRROR_SRC!" "!MIRROR_DST!" 2>&1
+echo  Mirroring !MIRROR_SRC! -> !MIRROR_DST!...
+"%BLENDER%" --background --python "%SCRIPTS%\mirror_front_step_blender.py" -- "!MIRROR_INPUT!" "!MIRROR_SRC!" "!MIRROR_DST!" 2>&1
 if errorlevel 1 (
     echo  ERROR: Mirroring failed
     pause & goto MAIN_MENU
