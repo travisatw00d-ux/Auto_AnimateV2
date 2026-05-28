@@ -1,7 +1,7 @@
 """
 Sync master.blend with the current GLB file.
-Reads animation names directly from the GLB binary (no Blender import)
-so action names match exactly and armature bone orientations are preserved.
+Reads animation names directly from the GLB binary (no Blender import).
+If master.blend is corrupted, rebuilds it from the GLB.
 Usage: blender --background --python sync_master_from_glb.py -- master.blend model.glb
 """
 import bpy, sys, os, json, struct
@@ -28,6 +28,16 @@ def read_glb_animation_names(filepath):
                 break
     return names
 
+def rebuild_from_glb(master_blend, model_glb):
+    """Rebuild master.blend from the GLB as a fallback."""
+    print("Rebuilding master.blend from GLB...")
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.ops.import_scene.gltf(filepath=model_glb)
+    if os.path.exists(master_blend):
+        os.remove(master_blend)
+    bpy.ops.wm.save_as_mainfile(filepath=master_blend)
+    print(f"Master rebuilt from GLB: {master_blend}")
+
 def main():
     args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     if len(args) < 2:
@@ -45,30 +55,35 @@ def main():
         print("No GLB found - cannot sync")
         sys.exit(1)
 
-    glb_names = set(read_glb_animation_names(model_glb))
-    print(f"GLB animations ({len(glb_names)}): {sorted(glb_names) if glb_names else '(none)'}")
+    try:
+        glb_names = set(read_glb_animation_names(model_glb))
+        print(f"GLB animations ({len(glb_names)}): {sorted(glb_names) if glb_names else '(none)'}")
 
-    bpy.ops.wm.open_mainfile(filepath=master_blend)
+        bpy.ops.wm.open_mainfile(filepath=master_blend)
 
-    removed = 0
-    for a in list(bpy.data.actions):
-        if a.name in ('T-Pose', 'Action', 'Dope Sheet Action'):
-            continue
-        try:
-            if a.name not in glb_names and a.fcurves:
-                bpy.data.actions.remove(a)
-                removed += 1
-                print(f"  Removed: {a.name}")
-        except ReferenceError:
-            print(f"  Skipped corrupted action: {a.name}")
+        removed = 0
+        for a in list(bpy.data.actions):
+            if a.name in ('T-Pose', 'Action', 'Dope Sheet Action'):
+                continue
+            try:
+                if a.name not in glb_names and a.fcurves:
+                    bpy.data.actions.remove(a)
+                    removed += 1
+                    print(f"  Removed: {a.name}")
+            except ReferenceError:
+                print(f"  Skipped corrupted action: {a.name}")
 
-    print(f"Removed {removed} stale actions from master")
+        print(f"Removed {removed} stale actions from master")
 
-    if removed > 0:
-        bpy.ops.wm.save_as_mainfile(filepath=master_blend)
-        print(f"Master saved: {master_blend}")
-    else:
-        print("Master already in sync")
+        if removed > 0:
+            bpy.ops.wm.save_as_mainfile(filepath=master_blend)
+            print(f"Master saved: {master_blend}")
+        else:
+            print("Master already in sync")
+    except Exception as e:
+        print(f"Sync error: {e}")
+        print("Master.blend corrupted - rebuilding from GLB")
+        rebuild_from_glb(master_blend, model_glb)
 
 if __name__ == "__main__":
     main()
