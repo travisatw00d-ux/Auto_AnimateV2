@@ -49,6 +49,9 @@ if abs(sf - 1.0) > 0.001:
     source.scale = (1.0, 1.0, 1.0)
 print(f"Source scaled by {sf:.4f}")
 
+# Force consistent 30fps regardless of BVH native frame rate
+bpy.context.scene.render.fps = 30
+
 # -- Bone mapping for fallback --
 BONE_MAP = [
     ("Hips","CC_Base_Hip"),("Spine1","CC_Base_Spine01"),("Spine2","CC_Base_Spine02"),
