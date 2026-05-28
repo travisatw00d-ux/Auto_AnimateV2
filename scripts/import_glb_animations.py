@@ -1,6 +1,6 @@
 """
-Import existing animation actions from a GLB file into master.blend.
-Preserves animations that were already on the model before the pipeline ran.
+Import existing animation actions from a GLB file into master.blend by
+appending actions directly via Blender's data linking (no fcurve serialization).
 Usage: blender --background --python import_glb_animations.py -- model.glb master.blend
 """
 import bpy, sys, os
@@ -21,60 +21,59 @@ def main():
         print(f"ERROR: No master.blend at {master_blend}")
         sys.exit(1)
 
-    # Step 1: Import GLB in a fresh session and capture animation fcurve data
+    # Step 1: Import GLB and save as temp blend
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=model_glb)
 
-    glb_actions = []
-    for a in bpy.data.actions:
-        if 'T-Pose' in a.name or a.name == 'Action' or not a.fcurves:
-            continue
-        name = a.name
-        for s in ('.001','.002','.003'):
-            if name.endswith(s): name = name[:-len(s)]
-        fcurve_data = []
-        for fc in a.fcurves:
-            if '.scale' in fc.data_path:
-                continue
-            pts = [(float(kp.co[0]), float(kp.co[1])) for kp in fc.keyframe_points]
-            fcurve_data.append((fc.data_path, fc.array_index, pts))
-        glb_actions.append((name, fcurve_data))
-        print(f"  Captured: {name} ({len(fcurve_data)} rotation fcurves)")
-
-    if not glb_actions:
+    glb_arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    glb_action_names = [a.name for a in bpy.data.actions if a.fcurves and 'T-Pose' not in a.name and a.name != 'Action']
+    if not glb_action_names:
         print("No animations found in GLB - nothing to import")
         return
+    print(f"GLB has animations: {glb_action_names}")
 
-    print(f"Captured {len(glb_actions)} animations from GLB")
+    temp_blend = master_blend + ".temp_glb_import.blend"
+    bpy.ops.wm.save_as_mainfile(filepath=temp_blend)
+    print(f"Saved temp blend: {temp_blend}")
 
-    # Step 2: Open master.blend and add captured actions with correct armature slot
+    # Step 2: Open master.blend and append actions from temp blend
     bpy.ops.wm.open_mainfile(filepath=master_blend)
     arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
     if arm is None:
-        print("WARNING: No armature in master.blend - cannot bind actions")
+        print("WARNING: No armature in master.blend")
+        os.remove(temp_blend)
         return
     arm_name = arm.name
 
-    existing = {a.name for a in bpy.data.actions}
-    added = 0
-    for name, fcurve_data in glb_actions:
-        if name in existing:
-            print(f"  Action '{name}' already in master - skipping")
-            continue
-        new = bpy.data.actions.new(name=name)
-        new.use_fake_user = True
-        new.slots.new(id_type='OBJECT', name=arm_name)
-        for dpath, index, pts in fcurve_data:
-            nfc = new.fcurves.new(dpath, index=index)
-            nfc.keyframe_points.add(len(pts))
-            for i, (t, v) in enumerate(pts):
-                nfc.keyframe_points[i].co = (t, v)
-        added += 1
-    print(f"Added {added} new actions from GLB to master.blend")
+    # Append all actions from the temp blend that aren't already in master
+    with bpy.data.libraries.load(temp_blend, link=False) as (data_from, data_to):
+        actions_to_load = [n for n in data_from.actions if n not in bpy.data.actions and 'T-Pose' not in n and n != 'Action']
+        if actions_to_load:
+            data_to.actions = actions_to_load
+            print(f"Appended actions: {actions_to_load}")
+        else:
+            print("All GLB actions already in master")
+
+    # Fix slot names on appended actions: they referenced the GLB armature name,
+    # but need to reference the master.blend armature name for NLA evaluation.
+    if arm_name:
+        for a in bpy.data.actions:
+            if a.name not in glb_action_names:
+                continue
+            has_correct_slot = any(s.name == arm_name for s in a.slots)
+            if not has_correct_slot:
+                for s in list(a.slots):
+                    a.slots.remove(s)
+                a.slots.new(id_type='OBJECT', name=arm_name)
+
+    # Remove temp blend
+    if os.path.exists(temp_blend):
+        os.remove(temp_blend)
 
     if os.path.exists(master_blend):
         os.remove(master_blend)
     bpy.ops.wm.save_as_mainfile(filepath=master_blend)
+    print(f"Master saved: {master_blend}")
 
 if __name__ == "__main__":
     main()
