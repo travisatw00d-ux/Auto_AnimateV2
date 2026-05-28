@@ -36,6 +36,8 @@ def main():
         for fc in a.fcurves:
             if '.scale' in fc.data_path:
                 continue
+            if '.location' in fc.data_path:
+                continue
             pts = [(float(kp.co[0]), float(kp.co[1])) for kp in fc.keyframe_points]
             fcurve_data.append((fc.data_path, fc.array_index, pts))
         glb_actions.append((name, fcurve_data))

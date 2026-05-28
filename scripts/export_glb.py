@@ -67,7 +67,7 @@ def main():
         export_animations=True, export_nla_strips=True,
         export_skins=True, export_image_format="AUTO",
         export_texcoords=True, export_normals=True,
-        export_materials="EXPORT", export_apply=True,
+        export_materials="EXPORT", export_apply=False,
         export_force_sampling=True,
     )
     sz = os.path.getsize(output_glb)/1024
