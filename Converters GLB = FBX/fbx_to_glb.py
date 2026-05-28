@@ -94,7 +94,7 @@ def main():
     for m in all_meshes:
         vgs = [vg.name for vg in m.vertex_groups]
         mods = [(mod.type, mod.object.name if mod.object else None) for mod in m.modifiers]
-        print(f"  {m.name}: {len(m.vertices)} verts, {len(m.polygons)} polys, "
+        print(f"  {m.name}: {len(m.data.vertices)} verts, {len(m.data.polygons)} polys, " 
               f"{len(vgs)} vgroups, modifiers={mods}")
         for slot in m.material_slots:
             mat = slot.material
