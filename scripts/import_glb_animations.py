@@ -1,6 +1,6 @@
 """
 Import existing animation actions from a GLB file into master.blend.
-Preserves animations by appending actions directly from the GLB import.
+Preserves animations by capturing fcurve data and recreating actions.
 Usage: blender --background --python import_glb_animations.py -- model.glb master.blend
 """
 import bpy, sys, os
@@ -21,59 +21,54 @@ def main():
         print(f"ERROR: No master.blend at {master_blend}")
         sys.exit(1)
 
-    # Step 1: Import GLB and save as temp blend
+    # Step 1: Import GLB and capture fcurve data
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=model_glb)
 
-    glb_action_names = {a.name for a in bpy.data.actions if a.fcurves and 'T-Pose' not in a.name and a.name != 'Action'}
-    if not glb_action_names:
+    glb_actions = []
+    for a in bpy.data.actions:
+        if 'T-Pose' in a.name or a.name == 'Action' or not a.fcurves:
+            continue
+        name = a.name
+        for s in ('.001','.002','.003'):
+            if name.endswith(s): name = name[:-len(s)]
+        fcurve_data = []
+        for fc in a.fcurves:
+            if '.scale' in fc.data_path:
+                continue
+            pts = [(float(kp.co[0]), float(kp.co[1])) for kp in fc.keyframe_points]
+            fcurve_data.append((fc.data_path, fc.array_index, pts))
+        glb_actions.append((name, fcurve_data))
+
+    if not glb_actions:
         print("No animations found in GLB - nothing to import")
         return
-    print(f"GLB has {len(glb_action_names)} animations: {sorted(glb_action_names)}")
 
-    temp_blend = master_blend + ".glb_import.blend"
-    if os.path.exists(temp_blend):
-        os.remove(temp_blend)
-    bpy.ops.wm.save_as_mainfile(filepath=temp_blend)
+    print(f"Captured {len(glb_actions)} animations: {[n for n,_ in glb_actions]}")
 
-    # Step 2: Open master.blend and append actions from temp blend
+    # Step 2: Open master.blend and recreate actions with same fcurve data
     bpy.ops.wm.open_mainfile(filepath=master_blend)
     arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
     if arm is None:
         print("WARNING: No armature in master.blend")
-        if os.path.exists(temp_blend):
-            os.remove(temp_blend)
         return
-    arm_name = arm.name
 
-    with bpy.data.libraries.load(temp_blend, link=False) as (data_from, data_to):
-        names_to_load = [n for n in data_from.actions if n not in bpy.data.actions and 'T-Pose' not in n and n != 'Action']
-        if names_to_load:
-            data_to.actions = names_to_load
-            print(f"Appended {len(names_to_load)} actions: {names_to_load}")
-        else:
-            print("All GLB actions already in master")
-
-    # Fix slot names on appended actions to match master armature
-    for a in bpy.data.actions:
-        if a.name not in glb_action_names:
+    existing = {a.name for a in bpy.data.actions}
+    for name, fcurve_data in glb_actions:
+        if name in existing:
             continue
-        needs_fix = True
-        for s in a.slots:
-            if s.name == arm_name:
-                needs_fix = False
-                break
-        if needs_fix:
-            for s in list(a.slots):
-                a.slots.remove(s)
-            a.slots.new(id_type='OBJECT', name=arm_name)
+        new = bpy.data.actions.new(name=name)
+        new.use_fake_user = True
+        for dpath, index, pts in fcurve_data:
+            nfc = new.fcurves.new(dpath, index=index)
+            nfc.keyframe_points.add(len(pts))
+            for i, (t, v) in enumerate(pts):
+                nfc.keyframe_points[i].co = (t, v)
 
-    if os.path.exists(temp_blend):
-        os.remove(temp_blend)
     if os.path.exists(master_blend):
         os.remove(master_blend)
     bpy.ops.wm.save_as_mainfile(filepath=master_blend)
-    print(f"Master saved with appended GLB animations: {master_blend}")
+    print(f"Master saved: {master_blend}")
 
 if __name__ == "__main__":
     main()
