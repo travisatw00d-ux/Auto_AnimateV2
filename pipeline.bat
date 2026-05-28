@@ -26,13 +26,15 @@ echo  [1] Clear All And Start New
 echo  [2] Add Animations (keep existing)
 echo  [3] Manually Delete Animations
 echo  [4] Mirror Animation (create mirrored copy of an animation)
+echo  [5] GLB/FBX Converter (convert between formats)
 echo.
-set /p MODE="  Choose (1, 2, 3, or 4): "
+set /p MODE="  Choose (1, 2, 3, 4, or 5): "
 
 if "!MODE!"=="1" goto START_FRESH
 if "!MODE!"=="2" goto ADD_MODE
 if "!MODE!"=="3" goto DELETE_MODE
 if "!MODE!"=="4" goto MIRROR_MODE
+if "!MODE!"=="5" goto CONVERT_MODE
 echo  Invalid choice
 pause & exit /b 1
 
@@ -192,6 +194,51 @@ if errorlevel 1 (
 del "%MIRROR_LIST%" >nul 2>&1
 echo.
 echo  Mirror complete: !MIRROR_SRC! -> !MIRROR_DST!
+echo.
+goto MAIN_MENU
+
+:CONVERT_MODE
+echo.
+echo ============================================================
+echo  GLB/FBX CONVERTER
+echo ============================================================
+echo.
+echo  Drag a .glb or .fbx file here to convert it
+echo.
+set /p CONV_INPUT="  File: "
+set "CONV_INPUT=!CONV_INPUT:"=!"
+if not exist "!CONV_INPUT!" (
+    echo  ERROR: File not found
+    pause & goto MAIN_MENU
+)
+for %%f in ("!CONV_INPUT!") do set "CONV_EXT=%%~xf"
+for %%f in ("!CONV_INPUT!") do set "CONV_NAME=%%~nf"
+for %%f in ("!CONV_INPUT!") do set "CONV_DIR=%%~dpf"
+set "CONV_DIR=!CONV_DIR:~0,-1!"
+
+:: Create output folder
+set "CONV_OUTDIR=!CONV_DIR!\!CONV_NAME!Converted"
+if not exist "!CONV_OUTDIR!" mkdir "!CONV_OUTDIR!"
+
+if /i "!CONV_EXT!"==".glb" (
+    set "CONV_OUTPUT=!CONV_OUTDIR!\!CONV_NAME!.fbx"
+    echo  Converting GLB -> FBX...
+    "%BLENDER%" --background --python "%SCRIPTS%\glb_to_fbx.py" -- "!CONV_INPUT!" "!CONV_OUTPUT!" 2>&1
+) else if /i "!CONV_EXT!"==".fbx" (
+    set "CONV_OUTPUT=!CONV_OUTDIR!\!CONV_NAME!.glb"
+    echo  Converting FBX -> GLB...
+    "%BLENDER%" --background --python "%SELF%Converters GLB = FBX\fbx_to_glb.py" -- --fbx "!CONV_INPUT!" --output "!CONV_OUTPUT!" 2>&1
+) else (
+    echo  ERROR: Unsupported format. Use .glb or .fbx
+    pause & goto MAIN_MENU
+)
+if errorlevel 1 (
+    echo  ERROR: Conversion failed
+    pause & goto MAIN_MENU
+)
+echo.
+echo  Converted: !CONV_INPUT!
+echo  Output:    !CONV_OUTPUT!
 echo.
 goto MAIN_MENU
 
