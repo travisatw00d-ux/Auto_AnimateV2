@@ -25,12 +25,14 @@ echo.
 echo  [1] Clear All And Start New
 echo  [2] Add Animations (keep existing)
 echo  [3] Manually Delete Animations
+echo  [4] Clean Temp (delete temporary files for a model)
 echo.
-set /p MODE="  Choose (1, 2, or 3): "
+set /p MODE="  Choose (1, 2, 3, or 4): "
 
 if "!MODE!"=="1" goto START_FRESH
 if "!MODE!"=="2" goto ADD_MODE
 if "!MODE!"=="3" goto DELETE_MODE
+if "!MODE!"=="4" goto CLEAN_TEMP
 echo  Invalid choice
 pause & exit /b 1
 
@@ -121,6 +123,34 @@ echo  ============================================================
 echo.
 
 del "%ANIM_LIST%" >nul 2>&1
+echo.
+goto MAIN_MENU
+
+:CLEAN_TEMP
+echo.
+echo ============================================================
+echo  CLEAN TEMP FILES
+echo ============================================================
+echo.
+echo  Drag a .fbx or .glb file here and press Enter
+echo  (this will delete all temporary files for this model)
+echo.
+set /p CLEAN_INPUT="  Model: "
+set "CLEAN_INPUT=!CLEAN_INPUT:"=!"
+if not exist "!CLEAN_INPUT!" (
+    echo  ERROR: File not found
+    pause & goto MAIN_MENU
+)
+for %%f in ("!CLEAN_INPUT!") do set "CLEAN_FILE=%%~nf"
+set "CLEAN_KEY=!CLEAN_FILE!"
+for %%a in (!CLEAN_KEY!) do set "CLEAN_KEY=%%a"
+set "CLEAN_KEY=!CLEAN_KEY: =_!"
+if exist "%TEMP%\!CLEAN_KEY!" (
+    rd /s /q "%TEMP%\!CLEAN_KEY!" >nul 2>&1
+    echo  Deleted temp files for: !CLEAN_KEY!
+) else (
+    echo  No temp files found for: !CLEAN_KEY!
+)
 echo.
 goto MAIN_MENU
 

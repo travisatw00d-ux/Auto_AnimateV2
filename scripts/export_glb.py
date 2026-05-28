@@ -32,7 +32,8 @@ def main():
     if arm.animation_data is None:
         arm.animation_data_create()
 
-    # Clear existing NLA tracks
+    # Clear any active action and existing NLA tracks
+    arm.animation_data.action = None
     for t in list(arm.animation_data.nla_tracks):
         arm.animation_data.nla_tracks.remove(t)
 
