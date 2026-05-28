@@ -1,9 +1,7 @@
 """
-Mirror animation (generic): location X negate, quat YZ negate (arm bones excluded).
-This variant matches Blender's display behavior.
-
-Usage:
-  blender --background --python mirror_front_step_blender.py -- <glb_path> <source_anim> <dest_anim>
+Mirror animation: loc X negate + quat YZ negate (arms excluded) + leg name swap.
+Adds leg bone name swapping (L↔R) to fix leg crossing issue.
+Usage: blender --background --python mirror_front_step_blender.py -- <glb_path> <source_anim> <dest_anim>
 """
 import bpy, sys
 
@@ -41,22 +39,47 @@ dst.name = dst_name
 
 # Bones that should NOT have quaternion mirrored (arms keep original rotation)
 no_quat_bones = ["Clavicle", "Upperarm", "Forearm", "Hand", "Thumb", "Index", "Mid", "Ring", "Pinky", "Elbow"]
+# Bones that should get L↔R name swap (leg bones)
+swap_bones = ["Thigh", "Calf", "Foot", "Toe"]
+
+# Build leg bone path mirror map
+leg_paths = set()
+for fc in dst.fcurves:
+    if '.' in fc.data_path:
+        p = fc.data_path.rsplit('.', 1)[0]
+        if any(kw in p for kw in swap_bones):
+            leg_paths.add(p)
+
+mirror_map = {}
+for p in leg_paths:
+    for q in leg_paths:
+        if p == q: continue
+        p_s = p.replace('_L_', '_R_').replace('_L"', '_R"').replace('"L_', '"R_')
+        p_s = p_s.replace('_L.', '_R.').replace('"L', '"R')
+        if p_s == q:
+            mirror_map[p] = q
+            mirror_map[q] = p
 
 for fc in list(dst.fcurves):
     dp = fc.data_path
     path, dot, attr = dp.rpartition('.')
 
-    # Negate X for location
+    # Negate X for location (ALL bones)
     if attr == 'location' and fc.array_index == 0:
         for kp in fc.keyframe_points:
             kp.co.y = -kp.co.y
             kp.handle_left.y = -kp.handle_left.y
             kp.handle_right.y = -kp.handle_right.y
 
+    # Leg bones: swap L↔R name
+    if any(kw in dp for kw in swap_bones):
+        if path in mirror_map:
+            fc.data_path = mirror_map[path] + '.' + attr
+
     # Negate YZ for rotation quaternion (skip arm bones)
     if attr == 'rotation_quaternion' and fc.array_index in (2, 3):
-        skip = any(kw in dp for kw in no_quat_bones)
-        if not skip:
+        skip_arm = any(kw in dp for kw in no_quat_bones)
+        if not skip_arm:
             for kp in fc.keyframe_points:
                 kp.co.y = -kp.co.y
                 kp.handle_left.y = -kp.handle_left.y
@@ -72,7 +95,7 @@ for fc in dst.fcurves:
             kp.handle_right.y = 0.17
         break
 
-print(f"{dst_name}: loc X neg + quat YZ neg (via Blender)")
+print(f"{dst_name}: loc X neg + quat YZ neg + leg name swap (arms preserved)")
 
 keep = {'Armature.001', 'tripo_node_25fa9213_3918_48e4_9500_07f6d78ef73cmesh.001'}
 for o in list(bpy.data.objects):
