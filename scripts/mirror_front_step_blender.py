@@ -39,40 +39,40 @@ if old:
 dst = src.copy()
 dst.name = dst_name
 
-    # Bones that should NOT have quaternion mirrored (arms keep original rotation)
-    no_quat_bones = ["Clavicle", "Upperarm", "Forearm", "Hand", "Thumb", "Index", "Mid", "Ring", "Pinky", "Elbow"]
+# Bones that should NOT have quaternion mirrored (arms keep original rotation)
+no_quat_bones = ["Clavicle", "Upperarm", "Forearm", "Hand", "Thumb", "Index", "Mid", "Ring", "Pinky", "Elbow"]
 
-    for fc in list(dst.fcurves):
-        dp = fc.data_path
-        path, dot, attr = dp.rpartition('.')
+for fc in list(dst.fcurves):
+    dp = fc.data_path
+    path, dot, attr = dp.rpartition('.')
 
-        # Negate X for location
-        if attr == 'location' and fc.array_index == 0:
+    # Negate X for location
+    if attr == 'location' and fc.array_index == 0:
+        for kp in fc.keyframe_points:
+            kp.co.y = -kp.co.y
+            kp.handle_left.y = -kp.handle_left.y
+            kp.handle_right.y = -kp.handle_right.y
+
+    # Negate YZ for rotation quaternion (skip arm bones)
+    if attr == 'rotation_quaternion' and fc.array_index in (2, 3):
+        skip = any(kw in dp for kw in no_quat_bones)
+        if not skip:
             for kp in fc.keyframe_points:
                 kp.co.y = -kp.co.y
                 kp.handle_left.y = -kp.handle_left.y
                 kp.handle_right.y = -kp.handle_right.y
 
-        # Negate YZ for rotation quaternion (skip arm bones)
-        if attr == 'rotation_quaternion' and fc.array_index in (2, 3):
-            skip = any(kw in dp for kw in no_quat_bones)
-            if not skip:
-                for kp in fc.keyframe_points:
-                    kp.co.y = -kp.co.y
-                    kp.handle_left.y = -kp.handle_left.y
-                    kp.handle_right.y = -kp.handle_right.y
+# Set root Y offset
+dp_root = 'pose.bones["RL_BoneRoot"].location'
+for fc in dst.fcurves:
+    if fc.data_path == dp_root and fc.array_index == 1:
+        for kp in fc.keyframe_points:
+            kp.co.y = 0.17
+            kp.handle_left.y = 0.17
+            kp.handle_right.y = 0.17
+        break
 
-    # Set root Y offset
-    dp_root = 'pose.bones["RL_BoneRoot"].location'
-    for fc in dst.fcurves:
-        if fc.data_path == dp_root and fc.array_index == 1:
-            for kp in fc.keyframe_points:
-                kp.co.y = 0.17
-                kp.handle_left.y = 0.17
-                kp.handle_right.y = 0.17
-            break
-
-    print(f"{dst_name}: loc X neg + quat YZ neg (via Blender)")
+print(f"{dst_name}: loc X neg + quat YZ neg (via Blender)")
 
 keep = {'Armature.001', 'tripo_node_25fa9213_3918_48e4_9500_07f6d78ef73cmesh.001'}
 for o in list(bpy.data.objects):
@@ -93,4 +93,3 @@ bpy.ops.export_scene.gltf(
     export_image_format='JPEG'
 )
 print("GLB exported")
-

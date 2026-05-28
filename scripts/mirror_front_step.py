@@ -40,57 +40,57 @@ if old:
 dst = src.copy()
 dst.name = dst_name
 
-    def is_leg_bone(path):
-        return any(kw in path for kw in ["Thigh", "Calf", "Foot", "Toe"])
+def is_leg_bone(path):
+    return any(kw in path for kw in ["Thigh", "Calf", "Foot", "Toe"])
 
-    leg_paths = set()
-    for fc in dst.fcurves:
-        if '.' in fc.data_path:
-            p = fc.data_path.rsplit('.', 1)[0]
-            if is_leg_bone(p):
-                leg_paths.add(p)
+leg_paths = set()
+for fc in dst.fcurves:
+    if '.' in fc.data_path:
+        p = fc.data_path.rsplit('.', 1)[0]
+        if is_leg_bone(p):
+            leg_paths.add(p)
 
-    mirror_map = {}
-    for p in leg_paths:
-        for q in leg_paths:
-            if p == q: continue
-            p_s = p.replace('_L_', '_R_').replace('_L"', '_R"').replace('"L_', '"R_')
-            p_s = p_s.replace('_L.', '_R.').replace('_L_', '_R_').replace('_L"', '_R"')
-            if p_s == q:
-                mirror_map[p] = q; mirror_map[q] = p
+mirror_map = {}
+for p in leg_paths:
+    for q in leg_paths:
+        if p == q: continue
+        p_s = p.replace('_L_', '_R_').replace('_L"', '_R"').replace('"L_', '"R_')
+        p_s = p_s.replace('_L.', '_R.').replace('_L_', '_R_').replace('_L"', '_R"')
+        if p_s == q:
+            mirror_map[p] = q; mirror_map[q] = p
 
-    for fc in list(dst.fcurves):
-        dp = fc.data_path
-        path, _dot, attr = dp.rpartition('.')
+for fc in list(dst.fcurves):
+    dp = fc.data_path
+    path, _dot, attr = dp.rpartition('.')
 
-        # Location X negate for ALL bones
-        if attr == 'location' and fc.array_index == 0:
+    # Location X negate for ALL bones
+    if attr == 'location' and fc.array_index == 0:
+        for kp in fc.keyframe_points:
+            kp.co.y = -kp.co.y
+            kp.handle_left.y = -kp.handle_left.y
+            kp.handle_right.y = -kp.handle_right.y
+
+    # Leg bones get name swap + quat YZ negate
+    if is_leg_bone(dp):
+        if path in mirror_map:
+            fc.data_path = mirror_map[path] + '.' + attr
+        if attr == 'rotation_quaternion' and fc.array_index in (2, 3):
             for kp in fc.keyframe_points:
                 kp.co.y = -kp.co.y
                 kp.handle_left.y = -kp.handle_left.y
                 kp.handle_right.y = -kp.handle_right.y
 
-        # Leg bones get name swap + quat YZ negate
-        if is_leg_bone(dp):
-            if path in mirror_map:
-                fc.data_path = mirror_map[path] + '.' + attr
-            if attr == 'rotation_quaternion' and fc.array_index in (2, 3):
-                for kp in fc.keyframe_points:
-                    kp.co.y = -kp.co.y
-                    kp.handle_left.y = -kp.handle_left.y
-                    kp.handle_right.y = -kp.handle_right.y
+# Set root Y offset
+dp_root = 'pose.bones["RL_BoneRoot"].location'
+for fc in dst.fcurves:
+    if fc.data_path == dp_root and fc.array_index == 1:
+        for kp in fc.keyframe_points:
+            kp.co.y = 0.17
+            kp.handle_left.y = 0.17
+            kp.handle_right.y = 0.17
+        break
 
-    # Set root Y offset
-    dp_root = 'pose.bones["RL_BoneRoot"].location'
-    for fc in dst.fcurves:
-        if fc.data_path == dp_root and fc.array_index == 1:
-            for kp in fc.keyframe_points:
-                kp.co.y = 0.17
-                kp.handle_left.y = 0.17
-                kp.handle_right.y = 0.17
-            break
-
-    print(f"{dst_name}: leg-only mirror (same as sidestep)")
+print(f"{dst_name}: leg-only mirror (same as sidestep)")
 
 keep = {'Armature.001', 'tripo_node_25fa9213_3918_48e4_9500_07f6d78ef73cmesh.001'}
 for o in list(bpy.data.objects):
@@ -111,4 +111,3 @@ bpy.ops.export_scene.gltf(
     export_image_format='JPEG'
 )
 print("GLB exported")
-
