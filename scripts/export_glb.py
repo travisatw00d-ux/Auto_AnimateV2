@@ -32,8 +32,7 @@ def main():
     if arm.animation_data is None:
         arm.animation_data_create()
 
-    # Clear any active action and existing NLA tracks
-    arm.animation_data.action = None
+    # Clear existing NLA tracks (keep active action for NLA evaluation)
     for t in list(arm.animation_data.nla_tracks):
         arm.animation_data.nla_tracks.remove(t)
 
@@ -53,11 +52,7 @@ def main():
     bpy.context.scene.render.fps = 30
     bpy.context.scene.frame_end = max((int(a.frame_range[1]) for a in anim_actions), default=30)
 
-    # Force armature transform to identity and reset pose bones to rest
-    arm.location = (0.0, 0.0, 0.0)
-    arm.rotation_euler = (0.0, 0.0, 0.0)
-    arm.rotation_quaternion = (1.0, 0.0, 0.0, 0.0)
-    arm.scale = (1.0, 1.0, 1.0)
+    # Reset pose bones to rest for clean NLA evaluation
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode='POSE')
     bpy.ops.pose.select_all(action='SELECT')
