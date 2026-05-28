@@ -98,6 +98,9 @@ else:
             except Exception as e:
                 print(f"Warning: could not load {best}: {e}")
 
+# ---- Pack all textures into memory ----
+bpy.ops.file.pack_all()
+
 # ---- Export GLB ----
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.export_scene.gltf(
