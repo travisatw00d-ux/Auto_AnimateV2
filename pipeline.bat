@@ -179,20 +179,18 @@ set "MODEL_KEY=!MODEL_KEY: =_!"
 set "MODEL_DIR=%TEMP%\!MODEL_KEY!"
 if not exist "!MODEL_DIR!" mkdir "!MODEL_DIR!"
 
-:: Convert GLB to FBX if needed
-if /i "!MODEL_EXT!"==".glb" (
-    echo  Converting .glb to .fbx...
-    set "MODEL_FBX=%TEMP%\!MODEL_KEY!.fbx"
-    "%BLENDER%" --background --python "%SCRIPTS%\glb_to_fbx.py" -- "!MODEL_INPUT!" "!MODEL_FBX!" 2>&1
-    if errorlevel 1 (echo  ERROR: GLB conversion failed & pause & exit /b 1)
-) else (
-    set "MODEL_FBX=!MODEL_INPUT!"
-)
-
 :: Per-model paths
 set "CHAR_BLEND=!MODEL_DIR!\character.blend"
 set "BASE_BLEND=!MODEL_DIR!\base.blend"
 set "MASTER_BLEND=!MODEL_DIR!\master.blend"
+
+:: Handle GLB vs FBX input
+if /i "!MODEL_EXT!"==".glb" (
+    set "IS_GLB=1"
+) else (
+    set "IS_GLB=0"
+    set "MODEL_FBX=!MODEL_INPUT!"
+)
 :: Output GLB replaces the original (same dir, same base name)
 set "OUTPUT_DIR=!MODEL_INPUT!"
 for %%f in ("!MODEL_INPUT!") do set "OUTPUT_DIR=%%~dpf"
@@ -226,27 +224,32 @@ if "!MODE!"=="2" (
         goto ANIM_LOOP
     )
     echo  First run in add-mode - creating base from model...
-    "%BLENDER%" --background --python "%SCRIPTS%\create_character_blend.py" -- "!MODEL_FBX!" "!BASE_BLEND!" 2>&1
-    if errorlevel 1 (echo  ERROR: Failed to create base & pause & exit /b 1)
-    echo  Transferring textures from model...
-    "%BLENDER%" --background --python "%SCRIPTS%\transfer_model_textures.py" -- "!MODEL_FBX!" "!BASE_BLEND!" "!CHAR_BLEND!" 2>&1
-    copy /y "!CHAR_BLEND!" "!MASTER_BLEND!" >nul
-    :: Import existing animations from original GLB (if any) into master.blend
-    if /i "!MODEL_EXT!"==".glb" (
-        echo  Importing existing animations from original GLB...
-        "%BLENDER%" --background --python "%SCRIPTS%\import_glb_animations.py" -- "!MODEL_INPUT!" "!MASTER_BLEND!" 2>&1
+    if "!IS_GLB!"=="1" (
+        "%BLENDER%" --background --python "%SCRIPTS%\import_glb_base.py" -- "!MODEL_INPUT!" "!BASE_BLEND!" 2>&1
+    ) else (
+        "%BLENDER%" --background --python "%SCRIPTS%\create_character_blend.py" -- "!MODEL_FBX!" "!BASE_BLEND!" 2>&1
+        if errorlevel 1 (echo  ERROR: Failed to create base & pause & exit /b 1)
+        echo  Transferring textures from model...
+        "%BLENDER%" --background --python "%SCRIPTS%\transfer_model_textures.py" -- "!MODEL_FBX!" "!BASE_BLEND!" "!CHAR_BLEND!" 2>&1
     )
+    copy /y "!BASE_BLEND!" "!MASTER_BLEND!" >nul
+    copy /y "!BASE_BLEND!" "!CHAR_BLEND!" >nul
     echo  Ready - add animations to this model
     goto ANIM_LOOP
 )
 
 :: Mode 1: clean start per-model
 echo  Creating base from model...
-"%BLENDER%" --background --python "%SCRIPTS%\create_character_blend.py" -- "!MODEL_FBX!" "!BASE_BLEND!" 2>&1
-if errorlevel 1 (echo  ERROR: Failed to create base & pause & exit /b 1)
-echo  Transferring textures from model...
-"%BLENDER%" --background --python "%SCRIPTS%\transfer_model_textures.py" -- "!MODEL_FBX!" "!BASE_BLEND!" "!CHAR_BLEND!" 2>&1
-copy /y "!CHAR_BLEND!" "!MASTER_BLEND!" >nul
+if "!IS_GLB!"=="1" (
+    "%BLENDER%" --background --python "%SCRIPTS%\import_glb_base.py" -- "!MODEL_INPUT!" "!BASE_BLEND!" 2>&1
+) else (
+    "%BLENDER%" --background --python "%SCRIPTS%\create_character_blend.py" -- "!MODEL_FBX!" "!BASE_BLEND!" 2>&1
+    if errorlevel 1 (echo  ERROR: Failed to create base & pause & exit /b 1)
+    echo  Transferring textures from model...
+    "%BLENDER%" --background --python "%SCRIPTS%\transfer_model_textures.py" -- "!MODEL_FBX!" "!BASE_BLEND!" "!CHAR_BLEND!" 2>&1
+)
+copy /y "!BASE_BLEND!" "!CHAR_BLEND!" >nul
+copy /y "!BASE_BLEND!" "!MASTER_BLEND!" >nul
 echo  Base + textures ready for !MODEL_KEY!
 
 :ANIM_LOOP
@@ -283,8 +286,10 @@ if /i "!ANIM_EXT!"==".fbx" (
     :: Mode 1: reset character from base before importing each animation
     if not "!MODE!"=="2" (
         copy /y "!BASE_BLEND!" "!CHAR_BLEND!" >nul
-        echo  Transferring textures from model...
-        "%BLENDER%" --background --python "%SCRIPTS%\transfer_model_textures.py" -- "!MODEL_FBX!" "!BASE_BLEND!" "!CHAR_BLEND!" 2>&1
+        if not "!IS_GLB!"=="1" (
+            echo  Transferring textures from model...
+            "%BLENDER%" --background --python "%SCRIPTS%\transfer_model_textures.py" -- "!MODEL_FBX!" "!BASE_BLEND!" "!CHAR_BLEND!" 2>&1
+        )
     )
     echo  [Mixamo FBX] Importing animation...
     set "ANIM_OUTPUT=%OUTPUT%\!ANIM_NAME!.fbx"
@@ -294,8 +299,10 @@ if /i "!ANIM_EXT!"==".fbx" (
 ) else if /i "!ANIM_EXT!"==".bvh" (
     set "BVH_WORK=!MODEL_DIR!\character_bvh.blend"
     copy /y "!BASE_BLEND!" "!BVH_WORK!" >nul
-    echo  Transferring textures...
-    "%BLENDER%" --background --python "%SCRIPTS%\transfer_model_textures.py" -- "!MODEL_FBX!" "!BASE_BLEND!" "!BVH_WORK!" 2>&1
+    if not "!IS_GLB!"=="1" (
+        echo  Transferring textures...
+        "%BLENDER%" --background --python "%SCRIPTS%\transfer_model_textures.py" -- "!MODEL_FBX!" "!BASE_BLEND!" "!BVH_WORK!" 2>&1
+    )
     echo  [BVH detected] Running retargeter...
     set "ANIM_OUTPUT=%OUTPUT%\!ANIM_NAME!.fbx"
     "%BLENDER%" --background "!BVH_WORK!" --python "%SCRIPTS%\add_animation_bvh.py" -- "!BVH_WORK!" "!ANIM_INPUT!" "%OUTPUT%" 2>&1
