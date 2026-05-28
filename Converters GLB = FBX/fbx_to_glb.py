@@ -24,6 +24,18 @@ def parse_args(argv):
             i += 1
     return d
 
+def scale_vertex_data(obj, factor):
+    """Scale vertex positions and bone heads/tails directly."""
+    if obj.type == 'MESH' and obj.data:
+        for v in obj.data.vertices:
+            v.co *= factor
+        obj.data.update()
+    elif obj.type == 'ARMATURE' and obj.data:
+        for b in obj.data.bones:
+            b.head *= factor
+            b.tail *= factor
+        obj.data.update()
+
 def main():
     args = parse_args(argv)
     fbx_path = os.path.abspath(args.get('fbx', ''))
@@ -43,36 +55,60 @@ def main():
     # ---- Import FBX ----
     bpy.ops.import_scene.fbx(filepath=fbx_path, use_anim=True)
 
-    armature = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    # DEBUG: list everything in the scene
+    print("=== Objects in scene ===")
+    for o in bpy.data.objects:
+        dims = o.dimensions if o.type == 'MESH' else (0,0,0)
+        print(f"  {o.name}: type={o.type}, scale={tuple(o.scale)}, "
+              f"dimensions=({dims[0]:.3f}, {dims[1]:.3f}, {dims[2]:.3f})")
+
     all_meshes = [o for o in bpy.data.objects if o.type == 'MESH']
+    armature = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
 
-    print(f"FBX imported: meshes={[m.name for m in all_meshes]}, armature={armature}")
+    # ---- Debug: print bone lengths if armature exists ----
+    if armature:
+        b_lens = [b.length for b in armature.data.bones]
+        print(f"Armature: {armature.name}, {len(b_lens)} bones, "
+              f"avg length={sum(b_lens)/len(b_lens):.3f}m")
 
-    # Debug: print dimensions and vertex groups
+    # ---- Scale correction: check if model is unreasonably large ----
+    max_dim = max((max(m.dimensions) for m in all_meshes if m.dimensions), default=0)
+    avg_bone = 0
+    if armature and armature.data.bones:
+        avg_bone = sum(b.length for b in armature.data.bones) / len(armature.data.bones)
+
+    scale_factor = 1.0
+    if max_dim > 100 or avg_bone > 0.5:
+        scale_factor = 0.01
+        print(f"Scale correction needed: max_dim={max_dim:.1f}m, avg_bone={avg_bone:.3f}m")
+        print(f"Applying 0.01 scale to all vertex/bone data (cm -> m)")
+        for obj in bpy.data.objects:
+            scale_vertex_data(obj, scale_factor)
+            obj.scale = (1.0, 1.0, 1.0)  # reset object scale since we baked into data
+        # Re-read meshes after scale
+        all_meshes = [o for o in bpy.data.objects if o.type == 'MESH']
+        armature = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+        for m in all_meshes:
+            dims = m.dimensions
+            print(f"  after scale: {m.name} dimensions=({dims[0]:.3f}, {dims[1]:.3f}, {dims[2]:.3f})")
+
+    # ---- Debug: mesh details ----
+    print("=== Mesh details ===")
     for m in all_meshes:
-        dims = m.dimensions
         vgs = [vg.name for vg in m.vertex_groups]
         mods = [(mod.type, mod.object.name if mod.object else None) for mod in m.modifiers]
-        print(f"  {m.name}: dimensions=({dims[0]:.2f}, {dims[1]:.2f}, {dims[2]:.2f}), "
+        print(f"  {m.name}: {len(m.vertices)} verts, {len(m.polygons)} polys, "
               f"{len(vgs)} vgroups, modifiers={mods}")
-
-    # ---- Scale correction: check if model is unreasonably large (> 100m) ----
-    max_dim = max((max(m.dimensions) for m in all_meshes if m.dimensions), default=0)
-    if max_dim > 100:
-        print(f"Scale correction: max dimension {max_dim:.1f}m > 100m, "
-              f"applying 0.01 scale (cm -> m)")
-        for obj in bpy.data.objects:
-            obj.scale = tuple(s * 0.01 for s in obj.scale)
-        bpy.ops.object.select_all(action='SELECT')
-        bpy.ops.object.transform_apply(scale=True)
-        for m in all_meshes:
-            print(f"  after scale: {m.name} dimensions=({m.dimensions[0]:.2f}, "
-                  f"{m.dimensions[1]:.2f}, {m.dimensions[2]:.2f})")
+        for slot in m.material_slots:
+            mat = slot.material
+            if mat and mat.node_tree:
+                for node in mat.node_tree.nodes:
+                    if node.type == 'TEX_IMAGE' and node.image:
+                        img = node.image
+                        print(f"    tex: {img.name} ({img.size[0]}x{img.size[1]}, "
+                              f"{img.colorspace_settings.name})")
 
     # ---- Identify skinned meshes (exclude orphan spheres) ----
-    armature = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
-    all_meshes = [o for o in bpy.data.objects if o.type == 'MESH']
-
     skinned_meshes = []
     for m in all_meshes:
         bone_names = {b.name for b in (armature.data.bones if armature else [])}
@@ -82,6 +118,8 @@ def main():
             mod.type == 'ARMATURE' for mod in m.modifiers)
         if is_skinned:
             skinned_meshes.append(m)
+        else:
+            print(f"  SKIP (not skinned): {m.name}")
 
     if not skinned_meshes:
         print("WARNING: No skinned meshes found, falling back to all meshes")
@@ -151,22 +189,10 @@ def main():
                     except Exception as e:
                         print(f"Warning: could not load {best}: {e}")
 
-    # ---- Material debug ----
-    for m in skinned_meshes:
-        for slot in m.material_slots:
-            mat = slot.material
-            if mat and mat.node_tree:
-                for node in mat.node_tree.nodes:
-                    if node.type == 'TEX_IMAGE' and node.image:
-                        img = node.image
-                        print(f"  {mat.name}: {node.name} -> {img.name} "
-                              f"({img.size[0]}x{img.size[1]}, "
-                              f"colorspace={img.colorspace_settings.name})")
-
     # ---- Pack all textures into memory ----
     bpy.ops.file.pack_all()
 
-    # ---- Select only what we want to export ----
+    # ---- Select ONLY what we want to export ----
     bpy.ops.object.select_all(action='DESELECT')
     if armature:
         armature.select_set(True)
@@ -174,10 +200,11 @@ def main():
     for m in skinned_meshes:
         m.select_set(True)
 
-    # ---- Export GLB ----
+    # ---- Export GLB (use_selection=True is critical!) ----
     bpy.ops.export_scene.gltf(
         filepath=output,
         export_format='GLB',
+        use_selection=True,
         export_texcoords=True,
         export_normals=True,
         export_skins=True,
